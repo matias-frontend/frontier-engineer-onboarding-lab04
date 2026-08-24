@@ -108,26 +108,41 @@ not mention.
 For the query *"why does vector length not affect the score"*, the correct
 document is `cmp_cosine` — the one stating that cosine similarity "ignores
 their magnitude, which makes it scale invariant". Vector search ranks it
-**first**. Both fusion methods **demote it to third**:
+**first**. Both fusion methods demote it:
 
 ```
 vector-only : cmp_cosine, cmp_embeddings, cmp_tfidf     <- correct answer at #1
-weighted    : cmp_tfidf, cmp_embeddings, cmp_cosine     <- demoted to #3
-rrf         : cmp_tfidf, cmp_embeddings, cmp_cosine     <- demoted to #3
+bm25-only   : cmp_embeddings, cmp_tfidf, cmp_bm25       <- does not surface it at all
+weighted    : cmp_embeddings, cmp_tfidf, cmp_cosine     <- demoted to #3
+rrf         : cmp_embeddings, cmp_cosine, cmp_tfidf     <- demoted to #2
 ```
 
 BM25 matches "length", "score", and "vector" lexically in documents about
 *length normalisation* and *scoring* — topically adjacent, but answering a
 different question. Those spurious matches outweigh the one genuinely correct
-semantic hit.
+semantic hit, and neither fusion method fully resists them.
 
-**Before the stop-word fix in §7 the damage was worse**: `cmp_cosine` fell out
-of the top three entirely, and weighted and RRF returned different wrong answers
-(`cmp_tfidf` and `cmp_bm25` respectively). Expanding the stop list recovered it
-to third and made the two fusion methods agree. That is a useful measurement in
-its own right — most of the "hybrid hurts conceptual queries" effect on this
-corpus was **BM25 tokenisation noise, not an inherent property of fusion**. What
-remains after cleaning it up is a milder version of the same effect.
+**RRF resists better than weighted here** — #2 against #3. Weighted fusion
+min-max normalises, so `cmp_cosine` being *last* among the vector hits it cares
+about costs it heavily (see §9). RRF only reads rank position, so a mediocre
+placement still contributes meaningfully. This is the practical version of the
+argument §9 makes with constructed numbers.
+
+### The measurement changed twice, which is itself worth recording
+
+This finding was re-measured after two corrections, and both changed it:
+
+1. **Before the stop-word fix (§7)**, `cmp_cosine` fell out of the top three
+   entirely and the two fusion methods returned different wrong answers. Most of
+   the apparent "hybrid hurts conceptual queries" effect was **BM25 tokenisation
+   noise, not a property of fusion**.
+2. **Before namespace isolation (§6)**, the comparison corpus shared an index
+   with another script's documents, and RRF's recovery of `cmp_cosine` to #2 was
+   invisible — both methods looked identical.
+
+The residual effect after both fixes is real but milder than the first run
+suggested. Worth stating plainly: the first two versions of this measurement
+would each have supported a stronger claim than the evidence actually warrants.
 
 The conclusion is not that hybrid retrieval is bad. It is that **fusion weights
 are a per-query-type decision, not a constant**. A query with no rare
@@ -149,12 +164,12 @@ which query types best":
 
 Stated so the numbers are not read as stronger than they are:
 
-- **Weighted and RRF agreed on top-1 for 8/8 queries** in the final run. On a
-  corpus this small, with both retrievers returning similar candidate sets,
-  the fusion method rarely changes the outcome. RRF's advantage shows up when
-  score distributions are skewed or the retrievers disagree sharply — which is
-  what `scripts/smoke-local.ts` demonstrates on constructed inputs, where the
-  two methods provably diverge.
+- **Weighted and RRF agreed on top-1 for 8/8 queries**, but that statistic is
+  misleading and the script now reports full-ordering disagreement alongside it.
+  The two methods returned *different orderings* on the query above — RRF
+  ranking the correct answer #2 where weighted put it #3 — while agreeing on a
+  shared (wrong) top-1. A top-1-only metric scores that as agreement and hides
+  the difference that actually matters.
 - **"Reachable only by keyword search" was 0/8.** With a candidate pool of 8
   over roughly two dozen chunks, the vector arm retrieves nearly everything, so
   it never *misses* a document that BM25 alone would rescue. Demonstrating that

@@ -176,6 +176,7 @@ console.log('=== strategy comparison ===');
 console.log('single-arm rows call the retrievers directly, so they are genuinely isolated.\n');
 
 let topOneDisagreements = 0;
+let orderingDisagreements = 0;
 let vectorOnlyFinds = 0;
 let keywordOnlyFinds = 0;
 
@@ -199,6 +200,14 @@ for (const query of QUERIES) {
     if (disagree) {
         topOneDisagreements += 1;
     }
+    // Top-1 agreement hides the case where both methods pick the same (wrong)
+    // winner but order the rest differently — which is exactly where one method
+    // rescues a correct answer the other buries.
+    const sameOrdering =
+        weighted.length === rrf.length && weighted.every((r, i) => r.id === rrf[i]?.id);
+    if (!sameOrdering) {
+        orderingDisagreements += 1;
+    }
 
     // Which arm found the eventual winner? That is the concrete argument for
     // running both.
@@ -218,7 +227,10 @@ for (const query of QUERIES) {
     console.log(`   bm25-only   : ${label(bm25Top)}${bm25Hits.length === 0 ? '   <- keyword search found nothing' : ''}`);
     console.log(`   weighted    : ${label(weighted)}`);
     console.log(`   rrf         : ${label(rrf)}`);
-    console.log(`   top-1: weighted=${docOf(weighted[0])} rrf=${docOf(rrf[0])} ${disagree ? '<- DISAGREE' : ''}`);
+    console.log(
+        `   top-1: weighted=${docOf(weighted[0])} rrf=${docOf(rrf[0])} ${disagree ? '<- DISAGREE' : ''}` +
+            (!disagree && !sameOrdering ? '   (same top-1, different ordering below it)' : '')
+    );
     // Did fusion keep the answer vector search already had at #1?
     const vectorBest = docOf(vectorTop[0]);
     const keptByWeighted = weighted.slice(0, SHOW).some(r => docOf(r) === vectorBest);
@@ -231,6 +243,9 @@ for (const query of QUERIES) {
 
 console.log('--- summary ---');
 console.log(`weighted vs RRF disagreed on top-1 for ${topOneDisagreements}/${QUERIES.length} queries.`);
+console.log(`...but produced a different ORDERING for ${orderingDisagreements}/${QUERIES.length}.`);
+console.log('The second number is the honest one: identical top-1 can still hide a');
+console.log('correct answer ranked #2 by one method and #3 by the other.');
 console.log(`top result was reachable ONLY by vector search in ${vectorOnlyFinds} case(s).`);
 console.log(`top result was reachable ONLY by keyword search in ${keywordOnlyFinds} case(s).`);
 console.log('Those two counts are the case for hybrid: neither arm alone covers both.\n');
