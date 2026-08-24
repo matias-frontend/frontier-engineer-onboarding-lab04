@@ -21,9 +21,27 @@ export interface Bm25Hit extends Bm25Document {
     bm25_score: number;
 }
 
+/**
+ * The handout's list (first two rows) plus interrogatives and common verbs.
+ *
+ * The extension is not cosmetic. With only the handout's list, the query
+ * "how do I prepare noodles from scratch" matched a TF-IDF document — because
+ * that document happens to contain "how" twice, and "how" carried real IDF
+ * weight. Question words are exactly the tokens a natural-language query is
+ * built from and exactly the ones that carry no topical signal, so leaving
+ * them in makes BM25 actively noisy on conversational queries.
+ *
+ * See docs/DEVIATIONS.md.
+ */
 const STOP_WORDS = new Set([
     'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to',
-    'for', 'of', 'and', 'or', 'but', 'not', 'with', 'this', 'that', 'it'
+    'for', 'of', 'and', 'or', 'but', 'not', 'with', 'this', 'that', 'it',
+    // interrogatives and pronouns — the scaffolding of a natural-language query
+    'how', 'what', 'why', 'when', 'where', 'which', 'who', 'i', 'you', 'my', 'me',
+    // high-frequency verbs and prepositions with no topical content
+    'do', 'does', 'did', 'be', 'been', 'have', 'has', 'had', 'can', 'could',
+    'would', 'should', 'will', 'from', 'by', 'as', 'so', 'if', 'then', 'than',
+    'there', 'here', 'about', 'into', 'out', 'up', 'down', 'over', 'under'
 ]);
 
 interface StoredDoc {

@@ -82,7 +82,62 @@ second one to keep in sync, and it is why `render.yaml` needs no disk.
 Step 5 is marked optional in the handout and is also extension challenge 3. It
 is out of scope for this build and is genuinely absent — not stubbed.
 
-## 7. What the test suite proved about weighted vs RRF
+## 7. Expanded stop-word list
+
+The handout specifies exactly 21 stop words. That list is too short for
+natural-language queries, and the comparison run proved it: the query
+*"how do I prepare noodles from scratch"* retrieved a **TF-IDF document**,
+because that document contains "how" twice and "how" carried real IDF weight
+against a corpus where it was otherwise rare.
+
+Question words and auxiliary verbs are precisely the tokens a conversational
+query is built from *and* precisely the ones carrying no topical signal, so
+leaving them in makes BM25 actively noisy on the query type it is worst at
+already. `STOP_WORDS` in `src/bm25.ts` keeps the handout's list and adds
+interrogatives, pronouns, and high-frequency verbs.
+
+After the change the same query tokenises to `["prepare","noodles","scratch"]`
+and BM25 correctly returns nothing for it — leaving the semantic arm to answer,
+which is the right division of labour.
+
+## 8. Measured: hybrid search can make conceptual queries *worse*
+
+The most useful result from `npm run compare`, and a caveat the handout does
+not mention.
+
+For the query *"why does vector length not affect the score"*, the correct
+document is `cmp_cosine` — the one stating that cosine similarity "ignores
+their magnitude, which makes it scale invariant". Vector search ranked it
+**first**. Both fusion methods pushed it **out of the top three**:
+
+```
+vector-only : cmp_cosine, cmp_embeddings, cmp_tfidf     <- correct
+weighted    : cmp_tfidf, cmp_embeddings, cmp_bm25       <- correct answer lost
+rrf         : cmp_bm25, cmp_embeddings, cmp_tfidf       <- correct answer lost
+```
+
+BM25 matched "length", "score", and "vector" lexically in documents about
+*length normalisation* and *scoring* — terms that are topically adjacent but
+answer a different question. Those spurious matches outweighed the one genuinely
+correct semantic hit.
+
+The conclusion is not that hybrid retrieval is bad. It is that **fusion weights
+are a per-query-type decision, not a constant**. A query with no rare
+identifiers has nothing for BM25 to contribute and everything for it to pollute.
+A production system would classify the query first — or, more cheaply, apply a
+cross-encoder rerank over the fused set, which is what `src/rerank.ts` exists
+for.
+
+This is also the honest answer to the lab's "document which approach handles
+which query types best":
+
+| Query type | Best strategy | Why |
+| --- | --- | --- |
+| Rare exact term (`Okapi`, `autolyse`) | BM25, or hybrid | High IDF makes it unmissable; embeddings blur rare tokens |
+| Pure paraphrase, common vocabulary | **Vector alone** | BM25 contributes noise and can displace the right answer |
+| Mixed (term + concept) | Hybrid | Both arms agree, and fusion reinforces the overlap |
+
+## 9. What the test suite proved about weighted vs RRF
 
 Worth recording, since extension challenge 1 asks for exactly this comparison.
 
