@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: hybrid-search
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      # Optional: enables the Cohere rerank extension. Leave unset to disable.
+      - key: COHERE_API_KEY
+        sync: false
+      # Must match the Pinecone index dimension, fixed when the index is created.
+      - key: EMBEDDING_DIM
+        value: "384"
+      # The handout's gemini-2.0-flash is shut down; 2.5-flash is closed to new keys.
+      - key: GEMINI_MODEL
+        value: gemini-3.6-flash
+    # No disk needed: Pinecone holds the vectors, and the BM25 keyword index is
+    # rebuilt from Pinecone metadata on every boot (src/hydrate.ts). That is
+    # what makes an ephemeral free-tier filesystem harmless here — the process
+    # keeps no state the vector store cannot reconstruct.
