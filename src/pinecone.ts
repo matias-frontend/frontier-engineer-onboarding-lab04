@@ -20,12 +20,33 @@ export interface ChunkMetadata extends RecordMetadata {
 
 let client: Pinecone | undefined;
 let handle: Index<ChunkMetadata> | undefined;
+let namespace = process.env.PINECONE_NAMESPACE ?? '';
 
 function pinecone(): Pinecone {
     if (!client) {
         client = new Pinecone({ apiKey: requireEnv('PINECONE_API_KEY') });
     }
     return client;
+}
+
+/**
+ * Scope all reads and writes to a Pinecone namespace.
+ *
+ * The free tier allows a single index, so scripts that index their own corpora
+ * would otherwise contend for it — one script's documents changing another's
+ * search results, and rehydration pulling in everything indiscriminately.
+ * Namespaces partition the one index cheaply, which is also how you would
+ * separate tenants in a real deployment.
+ *
+ * Call before any other operation; it resets the cached handle.
+ */
+export function setNamespace(name: string): void {
+    namespace = name;
+    handle = undefined;
+}
+
+export function currentNamespace(): string {
+    return namespace;
 }
 
 /**
@@ -70,15 +91,24 @@ export async function ensureIndex(waitMs = 60_000): Promise<Index<ChunkMetadata>
         await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
-    handle = pc.index<ChunkMetadata>(PINECONE_INDEX);
+    return index();
+}
+
+/** The index handle, scoped to the active namespace when one is set. */
+export function index(): Index<ChunkMetadata> {
+    if (!handle) {
+        const base = pinecone().index<ChunkMetadata>(PINECONE_INDEX);
+        handle = namespace ? base.namespace(namespace) : base;
+    }
     return handle;
 }
 
-export function index(): Index<ChunkMetadata> {
-    if (!handle) {
-        handle = pinecone().index<ChunkMetadata>(PINECONE_INDEX);
+/** Drop every vector in the active namespace, so a script can start clean. */
+export async function clearNamespace(): Promise<void> {
+    if (!namespace) {
+        throw new Error('Refusing to clear the default namespace. Call setNamespace() first.');
     }
-    return handle;
+    await index().deleteAll();
 }
 
 export interface UpsertRecord {

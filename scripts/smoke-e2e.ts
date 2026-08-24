@@ -5,13 +5,14 @@
  * disagree, then asserts each behaves the way the lab claims: BM25 wins on
  * rare exact terms, vector search wins on paraphrase, and hybrid gets both.
  *
- * Needs PINECONE_API_KEY and GOOGLE_API_KEY. Uses its own index (set
- * PINECONE_INDEX) so it never disturbs a real one.
+ * Needs PINECONE_API_KEY and GOOGLE_API_KEY. Runs in its own Pinecone
+ * namespace, wiped on each run, so it is idempotent and cannot be affected by
+ * whatever else has been indexed into the shared free-tier index.
  */
 import { bm25 } from '../src/bm25.js';
 import { PINECONE_INDEX } from '../src/config.js';
 import { rehydrateBm25 } from '../src/hydrate.js';
-import { ensureIndex, indexStats } from '../src/pinecone.js';
+import { clearNamespace, ensureIndex, indexStats, setNamespace } from '../src/pinecone.js';
 import { isDailyQuotaExhausted, quotaGuidance } from '../src/quota.js';
 import { indexDocument, search } from '../src/search.js';
 
@@ -74,10 +75,16 @@ const DOCS = [
     }
 ];
 
-console.log(`\nusing Pinecone index: ${PINECONE_INDEX}\n`);
+// Own namespace, wiped before each run: the free tier allows one index, and
+// compare.ts indexes its own corpus into the same one. Without isolation this
+// suite's assertions depend on whatever else ran last.
+setNamespace('smoke-e2e');
+
+console.log(`\nusing Pinecone index: ${PINECONE_INDEX} (namespace: smoke-e2e)\n`);
 
 console.log('setup');
 await guarded('ensureIndex', () => ensureIndex());
+await guarded('clear namespace', () => clearNamespace().catch(() => undefined));
 check('Pinecone index is ready', true);
 
 console.log('\nindexing');

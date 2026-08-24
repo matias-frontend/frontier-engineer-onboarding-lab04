@@ -22,7 +22,7 @@ import { bm25 } from '../src/bm25.js';
 import { embedQuery } from '../src/embeddings.js';
 import { rrfFusion, weightedFusion, type ScoredCandidate } from '../src/fusion.js';
 import { rehydrateBm25 } from '../src/hydrate.js';
-import { ensureIndex, queryVectors } from '../src/pinecone.js';
+import { clearNamespace, ensureIndex, queryVectors, setNamespace } from '../src/pinecone.js';
 import { isDailyQuotaExhausted, quotaGuidance } from '../src/quota.js';
 import { indexDocument } from '../src/search.js';
 
@@ -157,8 +157,12 @@ const docOf = (c: { metadata: Record<string, unknown> } | undefined) => String(c
 const label = (items: Array<{ metadata: Record<string, unknown> }>) =>
     items.length ? items.map(docOf).join(', ') : '(none)';
 
-console.log('\nindexing comparison corpus...');
+// Own namespace so this corpus neither pollutes nor is polluted by smoke-e2e.
+setNamespace('compare');
+
+console.log('\nindexing comparison corpus (namespace: compare)...');
 await guarded(() => ensureIndex());
+await guarded(() => clearNamespace().catch(() => undefined));
 for (const doc of CORPUS) {
     await guarded(() => indexDocument(doc.doc_id, doc.title, doc.text));
 }
