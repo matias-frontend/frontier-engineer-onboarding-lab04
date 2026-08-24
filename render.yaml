@@ -10,9 +10,10 @@ services:
         sync: false
       - key: GOOGLE_API_KEY
         sync: false
-      # Optional: enables the Cohere rerank extension. Leave unset to disable.
-      - key: COHERE_API_KEY
-        sync: false
+      # COHERE_API_KEY is deliberately NOT declared here. It enables the
+      # optional rerank extension, and declaring it would make Render prompt
+      # for a key most deployments do not have. To turn reranking on, add it
+      # manually in the dashboard — the code detects it at startup.
       # Must match the Pinecone index dimension, fixed when the index is created.
       - key: EMBEDDING_DIM
         value: "384"
