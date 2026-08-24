@@ -107,19 +107,27 @@ not mention.
 
 For the query *"why does vector length not affect the score"*, the correct
 document is `cmp_cosine` — the one stating that cosine similarity "ignores
-their magnitude, which makes it scale invariant". Vector search ranked it
-**first**. Both fusion methods pushed it **out of the top three**:
+their magnitude, which makes it scale invariant". Vector search ranks it
+**first**. Both fusion methods **demote it to third**:
 
 ```
-vector-only : cmp_cosine, cmp_embeddings, cmp_tfidf     <- correct
-weighted    : cmp_tfidf, cmp_embeddings, cmp_bm25       <- correct answer lost
-rrf         : cmp_bm25, cmp_embeddings, cmp_tfidf       <- correct answer lost
+vector-only : cmp_cosine, cmp_embeddings, cmp_tfidf     <- correct answer at #1
+weighted    : cmp_tfidf, cmp_embeddings, cmp_cosine     <- demoted to #3
+rrf         : cmp_tfidf, cmp_embeddings, cmp_cosine     <- demoted to #3
 ```
 
-BM25 matched "length", "score", and "vector" lexically in documents about
-*length normalisation* and *scoring* — terms that are topically adjacent but
-answer a different question. Those spurious matches outweighed the one genuinely
-correct semantic hit.
+BM25 matches "length", "score", and "vector" lexically in documents about
+*length normalisation* and *scoring* — topically adjacent, but answering a
+different question. Those spurious matches outweigh the one genuinely correct
+semantic hit.
+
+**Before the stop-word fix in §7 the damage was worse**: `cmp_cosine` fell out
+of the top three entirely, and weighted and RRF returned different wrong answers
+(`cmp_tfidf` and `cmp_bm25` respectively). Expanding the stop list recovered it
+to third and made the two fusion methods agree. That is a useful measurement in
+its own right — most of the "hybrid hurts conceptual queries" effect on this
+corpus was **BM25 tokenisation noise, not an inherent property of fusion**. What
+remains after cleaning it up is a milder version of the same effect.
 
 The conclusion is not that hybrid retrieval is bad. It is that **fusion weights
 are a per-query-type decision, not a constant**. A query with no rare
@@ -136,6 +144,23 @@ which query types best":
 | Rare exact term (`Okapi`, `autolyse`) | BM25, or hybrid | High IDF makes it unmissable; embeddings blur rare tokens |
 | Pure paraphrase, common vocabulary | **Vector alone** | BM25 contributes noise and can displace the right answer |
 | Mixed (term + concept) | Hybrid | Both arms agree, and fusion reinforces the overlap |
+
+### Two limitations of this measurement
+
+Stated so the numbers are not read as stronger than they are:
+
+- **Weighted and RRF agreed on top-1 for 8/8 queries** in the final run. On a
+  corpus this small, with both retrievers returning similar candidate sets,
+  the fusion method rarely changes the outcome. RRF's advantage shows up when
+  score distributions are skewed or the retrievers disagree sharply — which is
+  what `scripts/smoke-local.ts` demonstrates on constructed inputs, where the
+  two methods provably diverge.
+- **"Reachable only by keyword search" was 0/8.** With a candidate pool of 8
+  over roughly two dozen chunks, the vector arm retrieves nearly everything, so
+  it never *misses* a document that BM25 alone would rescue. Demonstrating that
+  case needs a corpus large enough for `topK` to be genuinely selective. The
+  reverse case — reachable only by vector search — did occur, on the paraphrase
+  query where BM25 correctly returns nothing at all.
 
 ## 9. What the test suite proved about weighted vs RRF
 
